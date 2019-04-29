@@ -1,0 +1,2 @@
+defmodule ConsulConfigs do
+end
