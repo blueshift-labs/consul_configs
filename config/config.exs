@@ -2,7 +2,7 @@
 # and its dependencies with the aid of the Mix.Config module.
 use Mix.Config
 
-config :consul_configs, host: "localhost", port: 8500, sync_interval: 0
+config :consul_configs, enabled: false
 
 # This configuration is loaded before any dependency and is restricted
 # to this project. If another project depends on this project, this

@@ -20,6 +20,7 @@ defmodule ConsulConfigs.MixProject do
 
   defp deps do
     [
+      {:distillery, "~> 2.0"},
       {:yaml_elixir, "~> 2.1"},
       {:jason, "~> 1.1.2"}
     ]

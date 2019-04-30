@@ -1,4 +1,4 @@
-defmodule ConsulConfigs.Sync do
+defmodule ConsulConfigs.Connection do
   use GenServer
   alias :httpc, as: HTTPClient
 
@@ -6,17 +6,37 @@ defmodule ConsulConfigs.Sync do
     defexception message: "unsupported config format"
   end
 
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, nil)
   end
 
-  def init(host: host, port: port, prefix: prefix, interval: interval) do
-    base_configs = apps(host, port, prefix) |> Enum.map(&{&1, Application.get_all_env(&1)})
-    sync_prefix(host, port, prefix, base_configs)
-    Process.send_after(self(), :sync, interval)
+  def init(_) do
+    case Application.get_env(:consul_configs, :enabled, false) do
+      true ->
+        host = Application.fetch_env!(:consul_configs, :host)
+        port = Application.fetch_env!(:consul_configs, :port)
+        prefix = Application.fetch_env!(:consul_configs, :prefix)
+        sync_interval = Application.get_env(:consul_configs, :sync_interval, 0)
 
-    {:ok,
-     [host: host, port: port, prefix: prefix, interval: interval, base_configs: base_configs]}
+        base_configs = apps(host, port, prefix) |> Enum.map(&{&1, Application.get_all_env(&1)})
+        sync_prefix(host, port, prefix, base_configs)
+
+        if sync_interval > 0 do
+          Process.send_after(self(), :sync, sync_interval)
+        end
+
+        {:ok,
+         [
+           host: host,
+           port: port,
+           prefix: prefix,
+           sync_interval: sync_interval,
+           base_configs: base_configs
+         ]}
+
+      false ->
+        {:ok, []}
+    end
   end
 
   def handle_call(_, _, state) do
@@ -29,11 +49,16 @@ defmodule ConsulConfigs.Sync do
 
   def handle_info(
         :sync,
-        [host: host, port: port, prefix: prefix, interval: interval, base_configs: base_configs] =
-          state
+        [
+          host: host,
+          port: port,
+          prefix: prefix,
+          sync_interval: sync_interval,
+          base_configs: base_configs
+        ] = state
       ) do
     sync_prefix(host, port, prefix, base_configs)
-    Process.send_after(self(), :sync, interval)
+    Process.send_after(self(), :sync, sync_interval)
     {:noreply, state}
   end
 
@@ -108,7 +133,12 @@ defmodule ConsulConfigs.Sync do
     for data <- config do
       case data do
         {k, v} when is_binary(k) ->
-          {String.to_atom(k), to_keywords(v)}
+          try do
+            {String.to_existing_atom(k), to_keywords(v)}
+          rescue
+            _ ->
+              {String.to_atom(k), to_keywords(v)}
+          end
 
         {k, v} ->
           {k, to_keywords(v)}
